@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Worship Team Schedule</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600;700&family=Figtree:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #f5f1e8; --surface: #fffdf7; --ink: #1e2622; --muted: #666d66;
+    --line: #ddd5c4; --accent: #8a6522; --green: #2c4a3d; --on-green: #f5f1e8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --bg: #141a17; --surface: #1b2420; --ink: #ece7da; --muted: #9aa39c;
+      --line: #2f3a34; --accent: #d1a65a; --green: #3b6352; --on-green: #f3efe4;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #141a17; --surface: #1b2420; --ink: #ece7da; --muted: #9aa39c;
+    --line: #2f3a34; --accent: #d1a65a; --green: #3b6352; --on-green: #f3efe4;
+  }
+  :root { box-sizing: border-box; padding-top: env(safe-area-inset-top, 0px); padding-bottom: env(safe-area-inset-bottom, 0px); }
+  *, *::before, *::after { box-sizing: inherit; }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  body {
+    margin: 0; min-height: 100%; background: var(--bg); color: var(--ink);
+    font-family: Figtree, system-ui, -apple-system, "Segoe UI", sans-serif;
+    font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 720px; margin: 0 auto; padding: 48px 20px 64px; }
+  h1, h2, h3 { font-family: "Cormorant Garamond", Georgia, serif; font-weight: 600; margin: 0; line-height: 1.1; }
+  h1 { font-size: clamp(2.3rem, 5vw, 3.1rem); margin-bottom: 10px; }
+  .lede { color: var(--muted); margin: 0 0 28px; max-width: 52ch; }
+  .rule { height: 1px; background: var(--line); margin: 0 0 28px; border: 0; }
+
+  .picker { background: var(--surface); border: 1px solid var(--line); padding: 22px; }
+  .picker label { display: block; font-weight: 600; font-size: .9rem; margin-bottom: 8px; }
+  .select-wrap { position: relative; }
+  .select-wrap::after {
+    content: ""; position: absolute; right: 16px; top: 50%; width: 9px; height: 9px;
+    border-right: 2px solid var(--muted); border-bottom: 2px solid var(--muted);
+    transform: translateY(-70%) rotate(45deg); pointer-events: none;
+  }
+  select {
+    width: 100%; appearance: none; -webkit-appearance: none; font: inherit; font-size: 1.05rem;
+    padding: 13px 44px 13px 14px; border: 1px solid var(--line); border-radius: 2px;
+    background: var(--bg); color: var(--ink); cursor: pointer;
+  }
+  select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  #results { margin-top: 40px; }
+  #results[hidden] { display: none; }
+  .person-head {
+    display: flex; align-items: baseline; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px;
+    border-bottom: 1px solid var(--line); padding-bottom: 12px;
+  }
+  .person-head h2 { font-size: 2rem; }
+  .count { color: var(--muted); font-size: .95rem; margin: 0; }
+
+  .service { display: grid; grid-template-columns: 96px 1fr; gap: 24px; padding: 26px 0; border-bottom: 1px solid var(--line); }
+  .date { background: var(--green); color: var(--on-green); text-align: center; padding: 16px 8px; align-self: start; }
+  .date .dow { display: block; font-size: .8rem; }
+  .date .day { display: block; font-family: "Cormorant Garamond", Georgia, serif; font-size: 2.6rem; line-height: 1; font-weight: 600; margin: 4px 0; }
+  .date .mon { display: block; font-size: .9rem; }
+  .service h3 { font-size: 1.45rem; }
+  .next-tag { display: inline-block; font-family: Figtree, system-ui, sans-serif; font-size: .75rem; font-weight: 600;
+    background: var(--accent); color: var(--surface); padding: 2px 10px; margin-left: 10px; vertical-align: middle; }
+  .time { color: var(--muted); margin: 4px 0 16px; }
+  .role { margin: 0 0 8px; padding: 6px 12px; border-left: 3px solid var(--accent); }
+  h4 { font-size: .85rem; color: var(--muted); font-weight: 600; margin: 18px 0 6px; }
+  .team { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .team li { display: flex; gap: 12px; }
+  .team span { color: var(--muted); min-width: 9.5rem; }
+  .songs { margin: 0; padding-left: 1.4em; }
+  .songs li { padding: 2px 0; }
+  .muted { color: var(--muted); margin: 0; }
+  .empty { padding: 28px; border: 1px dashed var(--line); color: var(--muted); text-align: center; margin-top: 8px; }
+
+  footer { margin-top: 48px; color: var(--muted); font-size: .85rem; }
+
+  @media (max-width: 520px) {
+    .service { grid-template-columns: 1fr; gap: 16px; }
+    .date { display: flex; gap: 10px; align-items: baseline; justify-content: flex-start; text-align: left; padding: 10px 14px; }
+    .date .day { font-size: 2rem; margin: 0; }
+    .team span { min-width: 7.5rem; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    #results:not([hidden]) { animation: rise .35s ease-out; }
+  }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header>
+    <h1>Worship team schedule</h1>
+    <p class="lede">Choose your name to see when you serve, who you are serving with, and the setlist for each service.</p>
+  </header>
+  <hr class="rule">
+
+  <section class="picker" aria-labelledby="pick-label">
+    <label id="pick-label" for="name">Your name</label>
+    <div class="select-wrap">
+      <select id="name"><option value="">Choose your name</option></select>
+    </div>
+  </section>
+
+  <section id="results" hidden aria-live="polite"></section>
+
+  <footer>Schedule as of <span id="asof"></span>. For changes, contact your worship coordinator.</footer>
+</main>
+
+<script>
+const DATA = {"asOf": "2026-11-19", "people": ["Bernard Sandigan", "Daisy Hidalgo", "Dennica Ruales", "Emmanuel Contapay", "Erwin Dalumpines", "Fina Edreinne Sanico", "Franzel Hilvano", "Hannah Pamela del Pilar", "Jenelyn Paciencia", "Jimmy Semillano Jr.", "Joshua Kempis", "Kianne Hilvano", "Kiko Nierras", "Kyle Conos", "Mariza Docil", "Mark Maasin", "Noah Gamos", "Red Sabela", "Riri Esquivel", "Ritchel Porta", "Ron Jaco Repulda", "Roni Lyn Nierras", "Russel Adrayan", "Samantha Alejandre", "Tiffanny Ronato", "Treshia Navidad", "Winston Lesigues", "Yoram Canson", "Zyralyn Cantero"], "services": [{"date": "2026-11-22", "time": "10:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-11-22", "time": "14:00", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-11-22", "time": "16:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-11-29", "time": "10:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-11-29", "time": "14:00", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-11-29", "time": "16:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-12-06", "time": "10:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-12-06", "time": "14:00", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-12-06", "time": "16:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-12-13", "time": "10:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-12-13", "time": "14:00", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-12-13", "time": "16:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-12-20", "time": "10:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-12-20", "time": "14:00", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-12-20", "time": "16:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-12-27", "time": "10:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-12-27", "time": "14:00", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2026-12-27", "time": "16:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-03", "time": "10:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-03", "time": "14:00", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-03", "time": "16:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-10", "time": "10:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-10", "time": "14:00", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-10", "time": "16:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-17", "time": "10:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-17", "time": "14:00", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-17", "time": "16:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-24", "time": "10:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-24", "time": "14:00", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-24", "time": "16:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-31", "time": "10:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-31", "time": "14:00", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-01-31", "time": "16:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-02-07", "time": "10:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-02-07", "time": "14:00", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}, {"date": "2027-02-07", "time": "16:30", "label": "Worship Service", "team": {"vx": "", "bv1": "", "bv2": "", "eg": "", "ag": "", "dr": "", "kb": "", "bb": ""}, "songs": []}]};
+
+const ROLE_ORDER = ['vx', 'bv1', 'bv2', 'eg', 'ag', 'dr', 'kb', 'bb'];
+const ROLE_LABEL = {
+  vx: 'Worship Leader', bv1: 'Back-up Vocals 1', bv2: 'Back-up Vocals 2',
+  eg: 'Electric Guitar', ag: 'Acoustic Guitar', dr: 'Drums', kb: 'Keyboard', bb: 'Bass Guitar'
+};
+
+const today = (() => { const n = new Date(); return new Date(n.getFullYear(), n.getMonth(), n.getDate()); })();
+
+function el(tag, attrs, ...kids) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v == null) continue;
+    if (k === 'class') node.className = v; else node.setAttribute(k, v);
+  }
+  for (const c of kids.flat()) {
+    if (c == null || c === false) continue;
+    node.append(c.nodeType ? c : document.createTextNode(String(c)));
+  }
+  return node;
+}
+
+function parseDate(iso) { const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d); }
+function fmtLong(dt) { return dt.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' }); }
+function fmtTime(t) {
+  const [h, m] = t.split(':').map(Number);
+  return `${((h + 11) % 12) + 1}:${String(m).padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`;
+}
+function rolesFor(service, name) { return ROLE_ORDER.filter(k => service.team[k] === name); }
+
+function card(s, name, isNext) {
+  const dt = parseDate(s.date);
+  const mine = rolesFor(s, name).map(k => ROLE_LABEL[k]).join(' & ');
+  const others = ROLE_ORDER
+    .filter(k => s.team[k] && s.team[k] !== name)
+    .map(k => el('li', {}, el('span', {}, ROLE_LABEL[k]), s.team[k]));
+  const songs = s.songs.map(t => el('li', {}, t));
+
+  return el('article', { class: 'service' },
+    el('div', { class: 'date' },
+      el('span', { class: 'dow' }, dt.toLocaleDateString('en-US', { weekday: 'short' })),
+      el('span', { class: 'day' }, String(dt.getDate())),
+      el('span', { class: 'mon' }, dt.toLocaleDateString('en-US', { month: 'long' }))),
+    el('div', {},
+      el('h3', {}, s.label, isNext ? el('span', { class: 'next-tag' }, 'Next service') : null),
+      el('p', { class: 'time' }, `${fmtTime(s.time)}  ·  ${fmtLong(dt)}`),
+      el('p', { class: 'role' }, 'Your role: ', el('strong', {}, mine)),
+      el('h4', {}, 'Serving with'),
+      others.length ? el('ul', { class: 'team' }, others) : el('p', { class: 'muted' }, 'No other team members listed yet.'),
+      el('h4', {}, 'Setlist'),
+      songs.length ? el('ol', { class: 'songs' }, songs) : el('p', { class: 'muted' }, 'Setlist not added yet.')
+    )
+  );
+}
+
+function render(name) {
+  const out = document.getElementById('results');
+  out.replaceChildren();
+  if (!name) { out.hidden = true; return; }
+  out.hidden = false;
+
+  const mine = DATA.services.filter(s => rolesFor(s, name).length);
+  const upcoming = mine.filter(s => parseDate(s.date) >= today);
+
+  out.append(el('div', { class: 'person-head' },
+    el('h2', {}, name),
+    el('p', { class: 'count' }, upcoming.length
+      ? `${upcoming.length} upcoming service${upcoming.length > 1 ? 's' : ''}`
+      : 'No upcoming services')));
+
+  if (!mine.length) {
+    out.append(el('div', { class: 'empty' }, 'You are not on any service in the lineup yet. Check back once the coordinator publishes the schedule.'));
+  } else if (!upcoming.length) {
+    out.append(el('div', { class: 'empty' }, 'You have no upcoming services. Your past services are no longer listed here.'));
+  } else {
+    upcoming.forEach((s, i) => out.append(card(s, name, i === 0)));
+  }
+}
+
+(function init() {
+  const sel = document.getElementById('name');
+  DATA.people.forEach(n => sel.append(el('option', { value: n }, n)));
+  sel.addEventListener('change', e => render(e.target.value));
+  document.getElementById('asof').textContent = parseDate(DATA.asOf).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' });
+})();
+</script>
+</body>
+</html>
