@@ -1091,10 +1091,26 @@ function scheduleCard(svc, mine, isNext) {
 }
 
 /* ---------- Shared week link: #week=YYYY-MM-DD, works until the end of that day ---------- */
-const weekParam = () => { const m = location.hash.match(/^#week=(\d{4}-\d{2}-\d{2})$/); return m ? m[1] : ''; };
+// Short link: #w1129 means November 29. It resolves to the matching date between 300 days ago and 65 days ahead.
+// The older #week=2026-11-29 links still work.
+function weekFromShort(mmdd) {
+  const mo = +mmdd.slice(0, 2), d = +mmdd.slice(2), now = new Date();
+  const lo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 300), hi = new Date(lo.getFullYear(), lo.getMonth(), lo.getDate() + 365);
+  for (const y of [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1]) {
+    const c = new Date(y, mo - 1, d);
+    if (c.getMonth() === mo - 1 && c >= lo && c < hi) return isoOf(y, mo, d);
+  }
+  return '';
+}
+const weekParam = () => {
+  let m = location.hash.match(/^#w(\d{4})$/);
+  if (m) return weekFromShort(m[1]);
+  m = location.hash.match(/^#week=(\d{4}-\d{2}-\d{2})$/);
+  return m ? m[1] : '';
+};
 const clearWeek = () => { if (weekParam()) history.replaceState(null, '', location.pathname + location.search); };
 async function shareWeek(date) {
-  const url = location.href.split('#')[0] + '#week=' + date, title = `Worship setlist for ${fmtLong(date)}`;
+  const url = location.href.split('#')[0] + '#w' + date.slice(5, 7) + date.slice(8, 10), title = `Worship setlist for ${fmtLong(date)}`;
   // The phone share sheet only on phones and only for real web addresses; desktop browsers just copy the link.
   if (navigator.share && /^https?:/.test(url) && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
     try { await navigator.share({ title, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
@@ -1103,7 +1119,7 @@ async function shareWeek(date) {
   try { await navigator.clipboard.writeText(url); toast(`Link copied. It stops working after ${fmtLong(date)}.`); }
   catch (e) { window.prompt('Copy this link:', url); }
 }
-const shareButton = svc => el('p', { class: 'song-links' }, el('button', { class: 'btn ghost small', type: 'button', onclick: () => shareWeek(svc.date) }, 'Share this week’s setlist'));
+const shareButton = svc => el('p', { class: 'song-links' }, el('button', { class: 'btn ghost small', type: 'button', onclick: () => shareWeek(svc.date) }, 'Share setlist'));
 function renderWeek(v, week) {
   const back = el('p', null, el('button', { class: 'btn small', type: 'button', onclick: () => { clearWeek(); render(); } }, 'See the full schedule'));
   if (week < todayISO()) { v.appendChild(el('div', { class: 'notice' }, el('p', null, 'This week’s link has ended.'), back)); return; }
