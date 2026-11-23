@@ -1163,7 +1163,7 @@ function buildUpdate(svc, o) {
     const names = keys.map(k => svc.team[k].raw).filter(Boolean);
     if (names.length) out.push(`${label}: ${names.join(', ')}`); else { out.push(`${label}: Open`); open.push(label); }
   });
-  if (open.length) out.push('', `Open spots: ${open.join(', ')}.${o.booking ? ' Volunteer in the app.' : ''}`);
+  if (open.length) out.push('', `Open spots: ${open.join(', ')}.${o.booking ? ' You can book in the app or message any of the core.' : ''}`);
   if (o.call) out.push('', `Call time: ${o.call}`);
   if (o.notes) out.push('', o.notes);
   if (o.base) out.push('', 'Setlist, keys, chord charts and videos:', `${o.base}#week=${svc.date}`);
