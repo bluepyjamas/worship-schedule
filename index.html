@@ -300,6 +300,15 @@ const CONFIG = {
   // Optional "Links" tab: one row per Sunday with its date and that week's Spotify playlist link. The Driving mode button uses it until that day is over.
   LINKS_TAB: 'Links',
   REFRESH_MS: 60000,
+  // "Add to calendar" settings. The Lineup sheet only has a start time, so the event length is a default.
+  CAL_DURATION_MIN: 120,
+  // Phone reminders, in minutes before the start. 1440 = 1 day, 120 = 2 hours.
+  CAL_REMINDERS_MIN: [1440, 120],
+  // Shown as the event location in the calendar. Leave '' to omit.
+  CAL_LOCATION: 'Victory Tacloban',
+  // Set to true AFTER you add CalendarFeed.gs to your Apps Script (see the setup steps at the top of that file).
+  // Shows "Subscribe to my calendar": a calendar that updates itself whenever the sheet changes.
+  CAL_FEED: false,
   // Only for spelling differences between the Lineup tab and the Roster tab, e.g. { "Kiko Nierras": "Francis 'Jorge' Nierras" }
   // Who is on the team is always read from the Roster tab, never from here.
   ALIASES: {}
@@ -1055,7 +1064,10 @@ function renderSchedule(v) {
     el('h2', null, isAll ? 'All Upcoming Events' : person),
     el('span', { class: 'count' }, `${matching.length} service${matching.length === 1 ? '' : 's'}`)
   ));
+  if (!isAll && CONFIG.CAL_FEED && bookingEnabled()) v.appendChild(feedBox(person));
   if (!isAll) renderMyBookings(v);
+  if (!isAll && matching.length > 1) v.appendChild(el('p', { class: 'song-links', style: 'margin-top:14px' },
+    el('button', { class: 'btn small', type: 'button', onclick: () => addToCalendar(matching, person) }, `Add all ${matching.length} to calendar`)));
   if (!matching.length) {
     v.appendChild(el('div', { class: 'empty', style: 'margin-top:12px' },
       isAll ? 'No lineups have been filled in yet.' : 'You are not on an upcoming lineup yet. Open the Calendar tab to volunteer for an event.'));
@@ -1081,7 +1093,7 @@ function scheduleCard(svc, mine, isNext) {
         ),
         el('p', { class: 'time' }, `${fmtLong(svc.date)} • ${fmtTime(svc.time)}`),
         mine.map(k => el('div', { class: 'role' }, el('span', { class: 'k' }, 'Your role:'), el('strong', null, ROLE_LABEL[k]))),
-        shareButton(svc),
+        actionRow(svc, mine.length ? state.selected : ''),
         el('h4', null, 'Team Lineup'),
         el('ul', { class: 'team' }, members.map(k => el('li', null, el('span', null, ROLE_LABEL[k]), svc.team[k].raw))),
         el('h4', null, 'Setlist'),
@@ -1091,27 +1103,10 @@ function scheduleCard(svc, mine, isNext) {
 }
 
 /* ---------- Shared week link: #week=YYYY-MM-DD, works until the end of that day ---------- */
-// Short link: #w1129 means November 29. It resolves to the matching date between 300 days ago and 65 days ahead.
-// The older #week=2026-11-29 links still work.
-function weekFromShort(mmdd) {
-  const mo = +mmdd.slice(0, 2), d = +mmdd.slice(2), now = new Date();
-  const lo = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 300), hi = new Date(lo.getFullYear(), lo.getMonth(), lo.getDate() + 365);
-  for (const y of [now.getFullYear() - 1, now.getFullYear(), now.getFullYear() + 1]) {
-    const c = new Date(y, mo - 1, d);
-    if (c.getMonth() === mo - 1 && c >= lo && c < hi) return isoOf(y, mo, d);
-  }
-  return '';
-}
-const weekParam = () => {
-  let m = location.hash.match(/^#w(\d{4})$/);
-  if (m) return weekFromShort(m[1]);
-  m = location.hash.match(/^#week=(\d{4}-\d{2}-\d{2})$/);
-  return m ? m[1] : '';
-};
+const weekParam = () => { const m = location.hash.match(/^#week=(\d{4}-\d{2}-\d{2})$/); return m ? m[1] : ''; };
 const clearWeek = () => { if (weekParam()) history.replaceState(null, '', location.pathname + location.search); };
 async function shareWeek(date) {
-  const base = /^https?:/.test(location.protocol) ? location.origin + location.pathname : location.href.split('#')[0].split('?')[0];
-  const url = base + '#w' + date.slice(5, 7) + date.slice(8, 10), title = `Worship setlist for ${fmtLong(date)}`;
+  const url = location.href.split('#')[0] + '#week=' + date, title = `Worship setlist for ${fmtLong(date)}`;
   // The phone share sheet only on phones and only for real web addresses; desktop browsers just copy the link.
   if (navigator.share && /^https?:/.test(url) && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
     try { await navigator.share({ title, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
@@ -1120,7 +1115,7 @@ async function shareWeek(date) {
   try { await navigator.clipboard.writeText(url); toast(`Link copied. It stops working after ${fmtLong(date)}.`); }
   catch (e) { window.prompt('Copy this link:', url); }
 }
-const shareButton = svc => el('p', { class: 'song-links' }, el('button', { class: 'btn ghost small', type: 'button', onclick: () => shareWeek(svc.date) }, 'Share setlist'));
+const shareButton = svc => el('p', { class: 'song-links' }, el('button', { class: 'btn ghost small', type: 'button', onclick: () => shareWeek(svc.date) }, 'Share this week’s setlist'));
 function renderWeek(v, week) {
   const back = el('p', null, el('button', { class: 'btn small', type: 'button', onclick: () => { clearWeek(); render(); } }, 'See the full schedule'));
   if (week < todayISO()) { v.appendChild(el('div', { class: 'notice' }, el('p', null, 'This week’s link has ended.'), back)); return; }
@@ -1176,6 +1171,7 @@ function renderYouthService(v) {
         ),
         el('p', { class: 'time' }, `${fmtLong(svc.date)} • ${fmtTime(svc.time)}`),
         mine.map(k => el('div', { class: 'role' }, el('span', { class: 'k' }, 'Your role:'), el('strong', null, ROLE_LABEL[k]))),
+        el('p', { class: 'song-links' }, calButton(svc, mine.length ? person : '')),
         el('h4', null, 'Team Lineup'),
         members.length
           ? el('ul', { class: 'team' }, members.map(k => el('li', null, el('span', null, ROLE_LABEL[k]), svc.team[k].raw)))
@@ -1274,7 +1270,7 @@ function serviceCard(svc, person) {
 
   if (!person || isAll || !bookingEnabled() && !mine.length) return card;
   if (mine.length) {
-    card.appendChild(el('div', { class: 'status-line serving' }, el('span', null, `You’re serving as ${mine.map(k => ROLE_LABEL[k]).join(' and ')}.`)));
+    card.appendChild(el('div', { class: 'status-line serving' }, el('span', null, `You’re serving as ${mine.map(k => ROLE_LABEL[k]).join(' and ')}.`), future && calButton(svc, person)));
   } else if (myBk) {
     card.appendChild(el('div', { class: 'status-line' },
       el('span', null, `You volunteered (${myBk.role || 'Any role'}). Waiting for your admin to confirm.`),
@@ -1307,6 +1303,89 @@ function renderMyBookings(v) {
       el('button', { class: 'btn small danger', type: 'button', onclick: () => cancelBooking(svc) }, 'Cancel')));
   });
   v.appendChild(box);
+}
+
+/* ---------- Add to calendar (.ics file with reminders, no server needed) ---------- */
+const icsEnc = new TextEncoder();
+const icsEsc = t => String(t == null ? '' : t).replace(/\\/g, '\\\\').replace(/;/g, '\\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+function icsFold(line) {
+  const out = []; let cur = '', bytes = 0;
+  for (const ch of line) {
+    const b = icsEnc.encode(ch).length;
+    if (bytes + b > 73) { out.push(cur); cur = ' ' + ch; bytes = 1 + b; } else { cur += ch; bytes += b; }
+  }
+  out.push(cur);
+  return out.join('\r\n');
+}
+// Floating local time (no timezone), so 9:00 stays 9:00 on the phone wherever it is.
+function icsStamp(iso, hhmm, addMin) {
+  const [y, m, d] = iso.split('-').map(Number), [h, mi] = hhmm.split(':').map(Number);
+  const t = new Date(Date.UTC(y, m - 1, d, h, mi + (addMin || 0)));
+  return `${t.getUTCFullYear()}${pad(t.getUTCMonth() + 1)}${pad(t.getUTCDate())}T${pad(t.getUTCHours())}${pad(t.getUTCMinutes())}00`;
+}
+function remindLabel(min) {
+  if (min % 1440 === 0) { const n = min / 1440; return `${n} day${n === 1 ? '' : 's'}`; }
+  if (min % 60 === 0) { const n = min / 60; return `${n} hour${n === 1 ? '' : 's'}`; }
+  return `${min} min`;
+}
+function icsEvent(svc, person) {
+  const mine = person && person !== ALL ? rolesOf(svc, person) : [];
+  const roleTxt = mine.map(k => ROLE_LABEL[k]).join(' & ');
+  const summary = roleTxt ? `${svc.label} · ${roleTxt}` : svc.label;
+  const members = ROLE_ORDER.filter(k => svc.team[k].raw);
+  const d = [];
+  if (roleTxt) d.push(`Your role: ${roleTxt}`);
+  if (members.length) { d.push('', 'Team lineup:'); members.forEach(k => d.push(`${ROLE_LABEL[k]}: ${svc.team[k].raw}`)); }
+  if (svc.songs.length) { d.push('', 'Setlist:'); svc.songs.forEach((sg, i) => d.push(`${i + 1}. ${sg.title}`)); }
+  d.push('', 'The lineup and setlist were saved when you added this. Check the schedule page for changes.');
+  if (/^https?:/.test(location.href)) d.push(location.href.split('#')[0]);
+  const lines = [
+    'BEGIN:VEVENT',
+    `UID:${svc.date}-${svc.time.replace(':', '')}-${normName(mine.length ? person : 'team').replace(/\W+/g, '-')}@victory-tacloban-worship`,
+    `DTSTAMP:${new Date().toISOString().replace(/[-:]|\.\d+/g, '')}`,
+    `DTSTART:${icsStamp(svc.date, svc.time, 0)}`,
+    `DTEND:${icsStamp(svc.date, svc.time, CONFIG.CAL_DURATION_MIN || 120)}`,
+    `SUMMARY:${icsEsc(summary)}`,
+    `DESCRIPTION:${icsEsc(d.join('\n'))}`
+  ];
+  if (CONFIG.CAL_LOCATION) lines.push(`LOCATION:${icsEsc(CONFIG.CAL_LOCATION)}`);
+  (CONFIG.CAL_REMINDERS_MIN || []).forEach(min => lines.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(summary)}`, `TRIGGER:-PT${min}M`, 'END:VALARM'));
+  lines.push('END:VEVENT');
+  return lines;
+}
+function addToCalendar(list, person) {
+  const body = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Victory Tacloban//Worship Schedule//EN', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
+    ...list.flatMap(sv => icsEvent(sv, person)), 'END:VCALENDAR'].map(icsFold).join('\r\n') + '\r\n';
+  const url = URL.createObjectURL(new Blob([body], { type: 'text/calendar;charset=utf-8' }));
+  const ios = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (ios) { if (!window.open(url, '_blank')) location.href = url; }   // iPhone shows its own "Add to Calendar" sheet
+  else { const a = el('a', { href: url, download: list.length === 1 ? `worship-${list[0].date}.ics` : 'worship-schedule.ics' }); document.body.appendChild(a); a.click(); a.remove(); }
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  const rem = (CONFIG.CAL_REMINDERS_MIN || []).map(remindLabel).join(' and ');
+  toast(ios ? 'Tap “Add” to save to your calendar.' : 'Open the downloaded file to save it to your calendar.' + (rem ? ` Reminders: ${rem} before.` : ''));
+}
+const calButton = (svc, person, label) => el('button', { class: 'btn ghost small', type: 'button', onclick: () => addToCalendar([svc], person) }, label || 'Add to calendar');
+const actionRow = (svc, person) => el('p', { class: 'song-links' }, calButton(svc, person),
+  el('button', { class: 'btn ghost small', type: 'button', onclick: () => shareWeek(svc.date) }, 'Share this week’s setlist'));
+
+/* ---------- Subscribe to a personal calendar feed (served by Apps Script, see CalendarFeed.gs) ---------- */
+const feedUrl = person => `${CONFIG.APPS_SCRIPT_URL}${CONFIG.APPS_SCRIPT_URL.includes('?') ? '&' : '?'}action=ics&name=${encodeURIComponent(person)}`;
+const isApple = () => /iPhone|iPad|iPod|Macintosh/.test(navigator.userAgent);
+function subscribeCalendar(person) {
+  const web = feedUrl(person).replace(/^https:/, 'webcal:');
+  if (isApple()) { location.href = web; toast('Choose Subscribe to add it to your calendar.'); }
+  else { window.open('https://calendar.google.com/calendar/r?cid=' + encodeURIComponent(web), '_blank'); toast('Confirm in Google Calendar. It can take a few hours to show changes.'); }
+}
+async function copyFeedLink(person) {
+  const url = feedUrl(person);
+  try { await navigator.clipboard.writeText(url); toast('Link copied. In your calendar app, add a calendar from URL and paste it.'); }
+  catch (e) { window.prompt('Copy this link, then add it as a calendar from URL:', url); }
+}
+function feedBox(person) {
+  return el('div', { class: 'range-box' },
+    el('p', null, el('strong', null, 'Keep your calendar up to date. '), 'Subscribe once and your services appear in your phone calendar and change when the schedule changes.'),
+    el('button', { class: 'btn small', type: 'button', onclick: () => subscribeCalendar(person) }, 'Subscribe to my calendar'),
+    el('button', { class: 'btn ghost small', type: 'button', onclick: () => copyFeedLink(person) }, 'Copy link'));
 }
 
 /* ---------- Booking actions ---------- */
@@ -1397,14 +1476,6 @@ setInterval(() => { if (!document.hidden) loadAll(); }, CONFIG.REFRESH_MS);
 })();
 
 /* ---------- Go ---------- */
-// Facebook, Messenger and ad links add tracking codes (?fbclid=...) to the address. Remove them so the address stays short and clean.
-(function cleanUrl() {
-  try {
-    const u = new URL(location.href); let changed = false;
-    [...u.searchParams.keys()].forEach(k => { if (/^(fbclid|gclid|igshid|mc_eid|utm_.*)$/i.test(k)) { u.searchParams.delete(k); changed = true; } });
-    if (changed) history.replaceState(null, '', u.pathname + u.search + u.hash);
-  } catch (e) { /* leave the address as it is */ }
-})();
 render();
 loadAll();
 </script>
