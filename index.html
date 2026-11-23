@@ -1110,7 +1110,8 @@ const weekParam = () => {
 };
 const clearWeek = () => { if (weekParam()) history.replaceState(null, '', location.pathname + location.search); };
 async function shareWeek(date) {
-  const url = location.href.split('#')[0] + '#w' + date.slice(5, 7) + date.slice(8, 10), title = `Worship setlist for ${fmtLong(date)}`;
+  const base = /^https?:/.test(location.protocol) ? location.origin + location.pathname : location.href.split('#')[0].split('?')[0];
+  const url = base + '#w' + date.slice(5, 7) + date.slice(8, 10), title = `Worship setlist for ${fmtLong(date)}`;
   // The phone share sheet only on phones and only for real web addresses; desktop browsers just copy the link.
   if (navigator.share && /^https?:/.test(url) && /Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
     try { await navigator.share({ title, url }); return; } catch (e) { if (e.name === 'AbortError') return; }
@@ -1396,6 +1397,14 @@ setInterval(() => { if (!document.hidden) loadAll(); }, CONFIG.REFRESH_MS);
 })();
 
 /* ---------- Go ---------- */
+// Facebook, Messenger and ad links add tracking codes (?fbclid=...) to the address. Remove them so the address stays short and clean.
+(function cleanUrl() {
+  try {
+    const u = new URL(location.href); let changed = false;
+    [...u.searchParams.keys()].forEach(k => { if (/^(fbclid|gclid|igshid|mc_eid|utm_.*)$/i.test(k)) { u.searchParams.delete(k); changed = true; } });
+    if (changed) history.replaceState(null, '', u.pathname + u.search + u.hash);
+  } catch (e) { /* leave the address as it is */ }
+})();
 render();
 loadAll();
 </script>
