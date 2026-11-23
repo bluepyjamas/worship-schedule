@@ -212,6 +212,20 @@
     .pill { font-size: .62rem; padding: 1px 6px; }
   }
   @media (prefers-reduced-motion: reduce) { .slide { transition: none; } }
+  .tabs { overflow-x: auto; }
+  .tab { white-space: nowrap; }
+  @media (max-width: 640px) { .tab { font-size: .88rem; padding: 10px 4px; white-space: normal; line-height: 1.2; } }
+  .upd-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; margin: 16px 0; }
+  .upd-grid .wide { grid-column: 1 / -1; }
+  .upd-grid label, .upd-box label { display: block; font-size: .85rem; font-weight: 600; color: var(--muted); margin-bottom: 6px; }
+  .upd-in { width: 100%; font: inherit; font-size: 1rem; padding: 12px 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); color: var(--ink); }
+  textarea.upd-in { min-height: 340px; line-height: 1.5; resize: vertical; }
+  .upd-status { margin: 0 0 8px; font-size: .92rem; font-weight: 600; }
+  .upd-status.ok { color: var(--green-2); } .upd-status.warn { color: var(--accent); }
+  .upd-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+  .upd-box { margin-top: 18px; }
+  .upd-box summary { cursor: pointer; font-weight: 600; color: var(--muted); }
+  @media (max-width: 640px) { .upd-grid { grid-template-columns: 1fr; } }
   .range-box { margin: 14px 0 0; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; }
   .range-box p { margin: 0; flex: 1 1 220px; font-size: .95rem; }
   .range-box .live { color: var(--accent); font-weight: 700; }
@@ -268,6 +282,7 @@
     <button class="tab" role="tab" id="tab-schedule" data-view="schedule" aria-selected="true" aria-controls="view">My Schedule</button>
     <button class="tab" role="tab" id="tab-youth" data-view="youth" aria-selected="false" aria-controls="view">Campus Schedule</button>
     <button class="tab" role="tab" id="tab-calendar" data-view="calendar" aria-selected="false" aria-controls="view">Calendar</button>
+    <button class="tab" role="tab" id="tab-update" data-view="update" aria-selected="false" aria-controls="view">Team Update</button>
   </div>
 
   <section id="view" role="tabpanel" aria-live="polite"></section>
@@ -704,6 +719,7 @@ function renderView() {
   const wk = weekParam();
   if (wk) { renderWeek(v, wk); return; }
   if (state.view === 'calendar') renderCalendar(v);
+  else if (state.view === 'update') renderUpdate(v);
   else if (state.view === 'youth') renderYouthService(v);
   else renderSchedule(v);
 }
@@ -1124,6 +1140,96 @@ function renderWeek(v, week) {
   if (!list.length) v.appendChild(el('div', { class: 'empty', style: 'margin-top:12px' }, 'No lineup has been posted for this date yet.'));
   list.forEach(sv => v.appendChild(scheduleCard(sv, [], false)));
   v.appendChild(back);
+}
+
+/* ---------- Team Update tab: builds the weekly chat message ---------- */
+const upd = { key: '', call: '', notes: '', draft: null, site: lsGet('worship-site-url') };
+const UPD_ROLES = [['Worship Leader', ['vx']], ['Back-up Vocals', ['bv1', 'bv2']], ['Electric Guitar', ['eg']], ['Acoustic Guitar', ['ag']], ['Drums', ['dr']], ['Keyboard', ['kb']], ['Bass Guitar', ['bb']]];
+// Address of this page for the setlist link. A typed address wins; otherwise the page's own address when it is online.
+function siteBase() {
+  const typed = String(upd.site || '').trim().replace(/#.*$/, '');
+  if (/^https?:\/\/\S+$/i.test(typed)) return typed;
+  return /^https?:/.test(location.href) ? location.href.split('#')[0] : '';
+}
+function buildUpdate(svc, o) {
+  const day = dateOf(svc.date).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+  const out = [`${day} · ${fmtTime(svc.time)}`, svc.label, ''];
+  out.push('SETLIST');
+  if (svc.songs.length) svc.songs.forEach((sg, i) => { const k = sg.playKey || sg.key; out.push(`${i + 1}. ${sg.title}${k ? ` (Key: ${k})` : ''}`); });
+  else out.push('To be announced');
+  out.push('', 'LINEUP');
+  const open = [];
+  UPD_ROLES.forEach(([label, keys]) => {
+    const names = keys.map(k => svc.team[k].raw).filter(Boolean);
+    if (names.length) out.push(`${label}: ${names.join(', ')}`); else { out.push(`${label}: Open`); open.push(label); }
+  });
+  if (open.length) out.push('', `Open spots: ${open.join(', ')}.${o.booking ? ' Volunteer in the app.' : ''}`);
+  if (o.call) out.push('', `Call time: ${o.call}`);
+  if (o.notes) out.push('', o.notes);
+  if (o.base) out.push('', 'Setlist, keys, chord charts and videos:', `${o.base}#week=${svc.date}`);
+  return { text: out.join('\n'), open };
+}
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch (e) {
+    const t = document.createElement('textarea');
+    t.value = text; t.style.cssText = 'position:fixed;opacity:0'; document.body.appendChild(t); t.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (err) {}
+    t.remove(); return ok;
+  }
+}
+function renderUpdate(v) {
+  const list = state.services.filter(s => s.date >= todayISO());
+  v.appendChild(el('div', { class: 'person-head' }, el('h2', null, 'Team Update'),
+    el('span', { class: 'count' }, 'Message for your team chat')));
+  if (!list.length) { v.appendChild(el('div', { class: 'empty', style: 'margin-top:12px' }, 'No upcoming services in the Lineup sheet yet.')); return; }
+  const keyOf = s => `${s.date}|${s.time}`;
+  if (!list.some(s => keyOf(s) === upd.key)) { upd.key = keyOf(list[0]); upd.draft = null; }
+  const svcNow = () => list.find(s => keyOf(s) === upd.key) || list[0];
+  const make = () => buildUpdate(svcNow(), { call: upd.call.trim(), notes: upd.notes.trim(), base: siteBase(), booking: bookingEnabled() });
+
+  const status = el('p', { class: 'upd-status' });
+  const ta = el('textarea', { class: 'upd-in', id: 'upd-text', rows: '16', 'aria-label': 'Team update message' });
+  const paint = (keepDraft) => {
+    const r = make();
+    ta.value = keepDraft && upd.draft != null ? upd.draft : r.text;
+    status.className = 'upd-status ' + (r.open.length ? 'warn' : 'ok');
+    status.textContent = r.open.length ? `${r.open.length} role${r.open.length === 1 ? '' : 's'} still open: ${r.open.join(', ')}` : 'Lineup is complete';
+  };
+  const regen = () => { upd.draft = null; paint(false); };
+
+  const sel = el('select', { id: 'upd-svc', 'aria-label': 'Service' }, list.map(s =>
+    el('option', { value: keyOf(s) }, `${dateOf(s.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })} · ${fmtTime(s.time)} · ${s.label}`)));
+  sel.value = upd.key;
+  sel.addEventListener('change', () => { upd.key = sel.value; regen(); });
+  const call = el('input', { class: 'upd-in', id: 'upd-call', type: 'text', placeholder: 'e.g. 8:30 AM', value: upd.call });
+  call.addEventListener('input', () => { upd.call = call.value; regen(); });
+  const notes = el('input', { class: 'upd-in', id: 'upd-notes', type: 'text', placeholder: 'e.g. Wear the team shirt. Rehearsal Saturday 4 PM.', value: upd.notes });
+  notes.addEventListener('input', () => { upd.notes = notes.value; regen(); });
+  ta.addEventListener('input', () => { upd.draft = ta.value; });
+
+  v.appendChild(el('div', { class: 'upd-grid' },
+    el('div', { class: 'wide' }, el('label', { for: 'upd-svc' }, 'Service'), el('div', { class: 'select-wrap' }, sel)),
+    el('div', null, el('label', { for: 'upd-call' }, 'Call time (optional)'), call),
+    el('div', null, el('label', { for: 'upd-notes' }, 'Note for the team (optional)'), notes)));
+  v.appendChild(status);
+  v.appendChild(ta);
+  paint(true);
+
+  const actions = el('div', { class: 'upd-actions' },
+    el('button', { class: 'btn', type: 'button', onclick: async () => { toast((await copyText(ta.value)) ? 'Message copied. Paste it into your team chat.' : 'Could not copy. Select the text and copy it.'); } }, 'Copy message'),
+    navigator.share && el('button', { class: 'btn ghost', type: 'button', onclick: async () => { try { await navigator.share({ text: ta.value }); } catch (e) {} } }, 'Share…'),
+    el('button', { class: 'btn ghost', type: 'button', onclick: () => { regen(); toast('Message reset.'); } }, 'Reset message'));
+  v.appendChild(actions);
+
+  const site = el('input', { class: 'upd-in', id: 'upd-site', type: 'url', placeholder: 'https://your-page-address', value: upd.site });
+  site.addEventListener('change', () => { upd.site = site.value.trim(); lsSet('worship-site-url', upd.site); upd.draft = null; renderView(); });
+  v.appendChild(el('details', { class: 'upd-box', open: siteBase() ? null : true },
+    el('summary', null, siteBase() ? 'Setlist link settings' : 'Add your page address to include the setlist link'),
+    el('p', { class: 'muted', style: 'margin:8px 0' }, siteBase()
+      ? `The message links to ${siteBase()}#week=${svcNow().date}. The link stops working after that date.`
+      : 'This page is not online yet, so the message has no setlist link. Once it is online, it is added automatically. You can also type the address here.'),
+    el('label', { for: 'upd-site' }, 'Page address (optional)'), site));
 }
 
 /* ---------- Youth Service tab ---------- */
