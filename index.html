@@ -105,11 +105,13 @@
   .person-head { display: flex; align-items: flex-end; justify-content: space-between; flex-wrap: wrap; gap: 8px 16px; padding-bottom: 14px; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
   .person-head h2 { font-size: 2.1rem; }
   .count { color: var(--muted); font-size: .92rem; font-weight: 600; }
-  .youth-intro { padding: 18px 20px; margin-bottom: 24px; background: var(--surface); border: 1px solid var(--line); }
-  .youth-intro h2 { font-size: 1.8rem; margin-bottom: 6px; }
-  .youth-intro p + p { margin-top: 8px; }
+  .youth-intro, .himaya-intro { padding: 18px 20px; margin-bottom: 24px; background: var(--surface); border: 1px solid var(--line); }
+  .youth-intro h2, .himaya-intro h2 { font-size: 1.8rem; margin-bottom: 6px; }
+  .youth-intro p + p, .himaya-intro p + p { margin-top: 8px; }
   .sample-students { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
   .sample-students span { padding: 4px 10px; background: var(--bg); border-radius: 999px; font-size: .9rem; }
+  .event-types { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+  .event-types span { padding: 4px 10px; background: var(--bg); border-radius: 999px; font-size: .9rem; }
   .sheet-link { display: inline-block; margin-top: 10px; color: var(--accent); font-weight: 600; }
   .service { display: grid; grid-template-columns: 104px 1fr; gap: 28px; padding: 28px 0; border-bottom: 1px solid var(--line); }
   .date { background: var(--green); color: var(--on-green); text-align: center; padding: 18px 8px; align-self: start; border-radius: 4px; }
@@ -281,6 +283,7 @@
   <div class="tabs" role="tablist" aria-label="Views">
     <button class="tab" role="tab" id="tab-schedule" data-view="schedule" aria-selected="true" aria-controls="view">My Schedule</button>
     <button class="tab" role="tab" id="tab-youth" data-view="youth" aria-selected="false" aria-controls="view">Campus Schedule</button>
+    <button class="tab" role="tab" id="tab-himaya" data-view="himaya" aria-selected="false" aria-controls="view">Himaya</button>
     <button class="tab" role="tab" id="tab-calendar" data-view="calendar" aria-selected="false" aria-controls="view">Calendar</button>
     <button class="tab" role="tab" id="tab-update" data-view="update" aria-selected="false" aria-controls="view">Team Update</button>
   </div>
@@ -721,6 +724,7 @@ function renderView() {
   if (state.view === 'calendar') renderCalendar(v);
   else if (state.view === 'update') renderUpdate(v);
   else if (state.view === 'youth') renderYouthService(v);
+  else if (state.view === 'himaya') renderHimayaService(v);
   else renderSchedule(v);
 }
 
@@ -1284,6 +1288,62 @@ function renderYouthService(v) {
           : el('p', { class: 'muted' }, 'Lineup to be announced'),
         el('h4', null, 'Setlist'),
         svc.songs.length ? [drivingButton(svc), el('ol', { class: 'songs' }, svc.songs.map(sg => songItem(sg, svc)))] :el('p', { class: 'muted' }, 'Setlist to be announced')
+      )
+    ));
+  });
+}
+
+/* ---------- Himaya tab: Worship Night and other Himaya events ---------- */
+const HIMAYA_EVENTS = ['Worship Night (Himaya)', 'Spiritual Foundations', 'Leaders Convergence', 'Prayer and Fasting'];
+function renderHimayaService(v) {
+  // Matches any label that starts with "Himaya", or that is one of the event names listed in HIMAYA_EVENTS.
+  const isHimaya = svc => /^himaya\b/i.test(svc.label.trim()) || HIMAYA_EVENTS.some(n => normName(n) === normName(svc.label));
+  const upcoming = state.services.filter(s => isHimaya(s) && s.date >= todayISO());
+  const person = state.selected;
+  const isAll = person === ALL;
+  const firstDate = upcoming.length ? upcoming[0].date : null;
+
+  v.appendChild(el('section', { class: 'himaya-intro' },
+    el('h2', null, 'Himaya'),
+    el('p', { class: 'muted' }, 'Himaya events are listed here separately from the Sunday services and the Youth Service.'),
+    el('div', { class: 'event-types', 'aria-label': 'Himaya event types' }, HIMAYA_EVENTS.map(name => el('span', null, name))),
+    el('p', { class: 'muted' }, 'For admins: add a future row to the Lineup sheet, set column C (Service) to one of the Himaya event names above, and fill in the date and time.'),
+    el('a', { class: 'sheet-link', href: `https://docs.google.com/spreadsheets/d/${CONFIG.SHEET_ID}/edit`, target: '_blank', rel: 'noopener' }, 'Open Lineup in Google Sheets')
+  ));
+  v.appendChild(el('div', { class: 'person-head' },
+    el('h2', null, 'Upcoming Himaya Events'),
+    el('span', { class: 'count' }, `${upcoming.length} event${upcoming.length === 1 ? '' : 's'}`)
+  ));
+
+  if (!upcoming.length) {
+    v.appendChild(el('div', { class: 'empty', style: 'margin-top:12px' }, 'No upcoming Himaya events yet. Ask an admin to add one to the Lineup sheet.'));
+    return;
+  }
+
+  upcoming.forEach(svc => {
+    const dt = dateOf(svc.date);
+    const mine = !isAll && person ? rolesOf(svc, person) : [];
+    const members = ROLE_ORDER.filter(k => svc.team[k].raw);
+    v.appendChild(el('article', { class: 'service' },
+      el('div', { class: 'date' },
+        el('span', { class: 'dow' }, DOW[dt.getDay()]),
+        el('span', { class: 'day' }, String(dt.getDate())),
+        el('span', { class: 'mon' }, MON[dt.getMonth()])
+      ),
+      el('div', null,
+        el('div', { class: 'service-title' },
+          el('h3', null, svc.label),
+          svc.date === firstDate && el('span', { class: 'next-tag' }, 'NEXT')
+        ),
+        el('p', { class: 'time' }, `${fmtLong(svc.date)} • ${fmtTime(svc.time)}`),
+        mine.map(k => el('div', { class: 'role' }, el('span', { class: 'k' }, 'Your role:'), el('strong', null, ROLE_LABEL[k]))),
+        el('p', { class: 'song-links' }, calButton(svc, mine.length ? person : '')),
+        el('h4', null, 'Team Lineup'),
+        members.length
+          ? el('ul', { class: 'team' }, members.map(k => el('li', null, el('span', null, ROLE_LABEL[k]), svc.team[k].raw)))
+          : el('p', { class: 'muted' }, 'Lineup to be announced'),
+        el('h4', null, 'Setlist'),
+        svc.songs.length ? [drivingButton(svc), el('ol', { class: 'songs' }, svc.songs.map(sg => songItem(sg, svc)))] : el('p', { class: 'muted' }, 'Setlist to be announced')
       )
     ));
   });
