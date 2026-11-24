@@ -1,0 +1,12 @@
+{
+  "name": "Victory Tacloban Worship Team Schedule",
+  "short_name": "Victory Worship",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f4f1ea",
+  "theme_color": "#244235",
+  "icons": [
+    { "src": "victory-logo.jpg", "sizes": "any", "type": "image/jpeg", "purpose": "any" }
+  ]
+}
